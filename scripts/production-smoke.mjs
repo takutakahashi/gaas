@@ -58,6 +58,9 @@ try {
 
   await page.getByText("検証用ノートPC").waitFor();
   await page.locator(".monthly-value").filter({ hasText: "￥10,000" }).waitFor();
+  if (process.env.SMOKE_SCREENSHOT) {
+    await page.screenshot({ path: process.env.SMOKE_SCREENSHOT, fullPage: true });
+  }
   const heading = await page.getByRole("heading", { name: "本番スモークテスト" }).textContent();
   console.log(JSON.stringify({ ok: true, heading, url: page.url() }));
 } finally {
