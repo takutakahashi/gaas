@@ -62,6 +62,31 @@ export const passkey = sqliteTable("passkey", {
   aaguid: text("aaguid"),
 });
 
+export const registrationContext = sqliteTable("registration_context", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().unique(),
+  name: text("name").notNull(),
+  expiresAt: timestamp("expires_at"),
+  consumedAt: integer("consumed_at", { mode: "timestamp_ms" }),
+  createdAt: timestamp("created_at"),
+});
+
+export const rateLimitBucket = sqliteTable("rate_limit_bucket", {
+  key: text("key").primaryKey(),
+  windowStartedAt: timestamp("window_started_at"),
+  count: integer("count").notNull(),
+});
+
+export const auditLog = sqliteTable("audit_log", {
+  id: text("id").primaryKey(),
+  actorUserId: text("actor_user_id").references(() => user.id, { onDelete: "set null" }),
+  event: text("event").notNull(),
+  targetId: text("target_id"),
+  projectId: text("project_id"),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at"),
+});
+
 export const project = sqliteTable("project", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -104,4 +129,4 @@ export const item = sqliteTable("item", {
   updatedAt: timestamp("updated_at"),
 }, (table) => [uniqueIndex("item_project_id_idx").on(table.projectId, table.id)]);
 
-export const schema = { user, session, account, verification, passkey, project, projectMember, projectInvitation, item };
+export const schema = { user, session, account, verification, passkey, registrationContext, rateLimitBucket, auditLog, project, projectMember, projectInvitation, item };

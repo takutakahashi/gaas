@@ -3,7 +3,6 @@
 import { Fingerprint, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { v7 as uuidv7 } from "uuid";
 import { authClient } from "@/lib/auth-client";
 
 export function AuthPanel() {
@@ -17,9 +16,19 @@ export function AuthPanel() {
     const trimmed = name.trim();
     if (!trimmed) return setError("表示名を入力してください");
     setBusy("signup"); setError("");
+    const contextResponse = await fetch("/api/registration-context", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    });
+    if (!contextResponse.ok) {
+      setBusy(null);
+      return setError(contextResponse.status === 429 ? "登録回数が多すぎます。しばらく待ってからお試しください" : "登録を開始できませんでした");
+    }
+    const { context } = await contextResponse.json() as { context: string };
     const result = await authClient.passkey.addPasskey({
       name: "メイン Passkey",
-      context: JSON.stringify({ id: uuidv7(), name: trimmed }),
+      context,
       createSession: true,
     });
     setBusy(null);

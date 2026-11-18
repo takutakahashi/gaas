@@ -6,6 +6,12 @@ if (!baseURL) throw new Error("SMOKE_BASE_URL is required");
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ baseURL });
 const page = await context.newPage();
+let registrationContext;
+page.on("response", async (response) => {
+  if (response.url().endsWith("/api/registration-context") && response.ok()) {
+    registrationContext = (await response.json()).context;
+  }
+});
 const cdp = await context.newCDPSession(page);
 await cdp.send("WebAuthn.enable");
 await cdp.send("WebAuthn.addVirtualAuthenticator", {
@@ -24,6 +30,18 @@ try {
   await page.getByLabel("表示名").fill("本番動作確認");
   await page.getByRole("button", { name: "Passkey を登録して始める" }).click();
   await page.waitForURL("**/projects", { timeout: 20_000 });
+
+  if (!registrationContext) throw new Error("registration context was not captured");
+  const unauthenticated = await browser.newContext({ baseURL });
+  const replay = await unauthenticated.request.get("/api/auth/passkey/generate-register-options", {
+    params: { context: registrationContext },
+  });
+  if (replay.status() !== 400) throw new Error(`consumed registration context was accepted: ${replay.status()}`);
+  const forged = await unauthenticated.request.get("/api/auth/passkey/generate-register-options", {
+    params: { context: JSON.stringify({ id: "00000000-0000-7000-8000-000000000001", name: "attacker" }) },
+  });
+  if (forged.status() !== 400) throw new Error(`forged registration context was accepted: ${forged.status()}`);
+  await unauthenticated.close();
 
   await page.getByLabel("帳簿名").fill("本番スモークテスト");
   await page.getByRole("button", { name: "帳簿を作成" }).click();
