@@ -1,0 +1,19 @@
+import { CalendarDays, PackagePlus, Settings, Users } from "lucide-react";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { AppShell } from "@/components/app-shell";
+import { deleteItem } from "@/app/actions";
+import { addMonths, monthlyAmortization, monthIndex } from "@/lib/amortization";
+import { getProjectForUser, listItems } from "@/lib/queries";
+import { requireUser } from "@/lib/session";
+
+const currentMonth = () => new Date().toISOString().slice(0, 7);
+const yen = (value: number) => new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 }).format(value);
+
+export default async function ProjectDashboard({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ month?: string }> }) {
+  const current = await requireUser(); const { projectId } = await params;
+  const selectedMonth = (await searchParams).month?.match(/^\d{4}-(0[1-9]|1[0-2])$/)?.[0] ?? currentMonth();
+  const [book, items] = await Promise.all([getProjectForUser(projectId, current.id), listItems(projectId)]); if (!book) notFound();
+  const rows = items.map((entry) => ({ ...entry, monthly: monthlyAmortization(entry, selectedMonth) })); const active = rows.filter((entry) => entry.monthly > 0); const total = rows.reduce((sum, entry) => sum + entry.monthly, 0);
+  return <AppShell userName={current.name}><header className="page-header project-header"><div><Link className="back-link" href="/projects">帳簿</Link><h1>{book.name}</h1><p>月ごとの配賦額と物品の内訳</p></div><div className="header-actions"><Link className="button button-secondary" href={`/projects/${projectId}/members`}><Users size={17} />メンバー</Link><Link className="button button-primary" href={`/projects/${projectId}/items/new`}><PackagePlus size={17} />物品を登録</Link></div></header><section className="month-summary"><form className="month-picker"><label htmlFor="month"><CalendarDays size={17} />表示月</label><input id="month" type="month" name="month" defaultValue={selectedMonth} /><button className="button button-small">表示</button></form><div className="total-block"><span>{selectedMonth.replace("-", "年 ")}月の償却額</span><strong>{yen(total)}</strong><small>{active.length} / {items.length} 件が償却中</small></div></section><section className="ledger-section"><div className="section-heading"><div><h2>月次内訳</h2><p>登録価格を耐用月数で定額配賦</p></div><span>{active.length} 件</span></div>{items.length === 0 ? <div className="empty-state"><PackagePlus size={28} /><h2>物品はまだありません</h2><p>価格と利用期間を登録すると、月額がここに表示されます</p><Link className="button button-primary" href={`/projects/${projectId}/items/new`}>最初の物品を登録</Link></div> : <div className="ledger-table"><div className="ledger-table-head"><span>物品</span><span>償却期間</span><span>取得価格</span><span>当月</span><span /></div>{rows.map((entry) => { const progress = Math.min(100, Math.max(0, (monthIndex(selectedMonth) - monthIndex(entry.amortizationStartMonth) + 1) / entry.usefulLifeMonths * 100)); return <div className={`ledger-table-row ${entry.monthly === 0 ? "is-inactive" : ""}`} key={entry.id}><span><strong>{entry.name}</strong><small>{entry.category}{entry.modelNumber ? ` / ${entry.modelNumber}` : ""}</small></span><span><small>{entry.amortizationStartMonth} — {addMonths(entry.amortizationStartMonth, entry.usefulLifeMonths - 1)}</small><i className="inline-line"><b style={{ width: `${progress}%` }} /></i></span><span className="numeric">{yen(entry.priceYen)}</span><span className="numeric monthly-value">{yen(entry.monthly)}</span><form action={deleteItem.bind(null, projectId, entry.id)}><button className="text-button" aria-label={`${entry.name}を削除`}>削除</button></form></div>; })}</div>}</section>{book.role === "owner" && <Link className="quiet-link" href={`/projects/${projectId}/members`}><Settings size={15} />帳簿の共有設定</Link>}</AppShell>;
+}
